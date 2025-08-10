@@ -542,8 +542,7 @@ char* keyPressHandler(uint32_t ulNotificationValue,int cnt){
 		return pword;
 	}
 }
-
-// read keypad (EXPLAIN WHY THE WHILE LOOP)@!!!!!!!!!!!!!!!!!!
+// read keypad function that returns pressed key value (in hex)
 uint8_t readKeypadChar(){
 	uint8_t val;
 
