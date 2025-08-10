@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -55,10 +54,10 @@ I2C_HandleTypeDef hi2c1;
 
 UART_HandleTypeDef huart2;
 
-/* Definitions for UARTIptTask */
-osThreadId_t UARTIptTaskHandle;
-const osThreadAttr_t UARTIptTask_attributes = {
-  .name = "UARTIptTask",
+/* Definitions for KeyPadIptTask */
+osThreadId_t KeyPadIptTaskHandle;
+const osThreadAttr_t KeyPadIptTask_attributes = {
+  .name = "KeyPadIptTask",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
@@ -116,7 +115,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
-void StartUARTIptTask(void *argument);
+void StartKeyPadIptTask(void *argument);
 void StartLCDLine2Task(void *argument);
 void StartRED_LEDTask(void *argument);
 void StartGreen_LEDTask(void *argument);
@@ -269,8 +268,8 @@ int main(void)
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
-  /* creation of UARTIptTask */
-  UARTIptTaskHandle = osThreadNew(StartUARTIptTask, NULL, &UARTIptTask_attributes);
+  /* creation of KeyPadIptTask */
+  KeyPadIptTaskHandle = osThreadNew(StartKeyPadIptTask, NULL, &KeyPadIptTask_attributes);
 
   /* creation of LCDLine2Task */
   LCDLine2TaskHandle = osThreadNew(StartLCDLine2Task, NULL, &LCDLine2Task_attributes);
@@ -630,17 +629,14 @@ uint8_t readKeypadChar(){
 }
 /* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartUARTIptTask */
+/* USER CODE BEGIN Header_StartKeyPadIptTask */
 /**
-  * @brief  Function implementing the UARTIptTask thread.
+  * @brief  Function implementing the KeyPadIptTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartUARTIptTask */
-
-// CHANGE NAME TO KEYPADIPTTASK
-// Task handles user input value and sends them to LCD Line 2 handler task
-void StartUARTIptTask(void *argument)
+/* USER CODE END Header_StartKeyPadIptTask */
+void StartKeyPadIptTask(void *argument)
 {
   /* USER CODE BEGIN 5 */
 	HD44780_Init(2);
@@ -700,8 +696,6 @@ void Clear_LCD_Line2Screen(){
 * @retval None
 */
 /* USER CODE END Header_StartLCDLine2Task */
-
-// Task that handles keys pressed
 void StartLCDLine2Task(void *argument)
 {
   /* USER CODE BEGIN StartLCDLine2Task */
@@ -716,10 +710,6 @@ void StartLCDLine2Task(void *argument)
 	/* Infinite loop */
 
 	if(xTaskNotifyWait(0, 0xffffffff, &ulNotificationValue, portMAX_DELAY)){
-
-		//////////////////////////////////////////////
-		//UTILISE UNE FONCITON WRITE__TO___LCD(cnt);//
-		//////////////////////////////////////////////
 
 		//Copy value of keyPressHandler into pword array
 		strcpy(pword,keyPressHandler(ulNotificationValue,cnt));
@@ -794,8 +784,6 @@ void StartLCDLine2Task(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartRED_LEDTask */
-
-// System in ARMED state
 void StartRED_LEDTask(void *argument)
 {
   /* USER CODE BEGIN StartRED_LEDTask */
@@ -820,8 +808,6 @@ void StartRED_LEDTask(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartGreen_LEDTask */
-
-// System in DISARMED state
 void StartGreen_LEDTask(void *argument)
 {
   /* USER CODE BEGIN StartGreen_LEDTask */
@@ -850,8 +836,6 @@ void StartGreen_LEDTask(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartLCDLine1Task */
-
-// DISPLAY system state on LCD line 1
 void StartLCDLine1Task(void *argument)
 {
   /* USER CODE BEGIN StartLCDLine1Task */
@@ -864,9 +848,6 @@ void StartLCDLine1Task(void *argument)
 
 		  // use mutex to synchronize use of shared ressource (LCD screen)
 		  osMutexAcquire(myMutexHandle, osWaitForever);
-
-		  //HD44780_SetCursor(0,0); EN DEHORSSSSSS???????????????????
-		  ///////////////////////////////////////////////////////////\
 
 		  //SYSTEM ARMED
 		  if(ulNotificationValue==ARMED){
@@ -908,8 +889,6 @@ void StartLCDLine1Task(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartResetPwordTask */
-
-// Reset Password task that handles OLD_PASSWORD or NEW_PASSWORD states
 void StartResetPwordTask(void *argument)
 {
   /* USER CODE BEGIN StartResetPwordTask */
@@ -934,6 +913,7 @@ void StartResetPwordTask(void *argument)
   }
   /* USER CODE END StartResetPwordTask */
 }
+
 /**
   * @brief  Period elapsed callback in non blocking mode
   * @note   This function is called  when TIM6 interrupt took place, inside
