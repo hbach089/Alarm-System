@@ -642,10 +642,6 @@ void StartKeyPadIptTask(void *argument)
 	HD44780_Clear();
 	HD44780_Backlight();
 
-//	uint32_t ulNotificationValue;
-//	int cnt=1;
-
-
 	//System starts in DISARMED mode
 	uint8_t val;
 	int sendflag=1;
