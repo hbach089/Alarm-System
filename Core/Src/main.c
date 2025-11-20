@@ -23,6 +23,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stm32f4xx_hal.h"
+#include "liquidcrystal_i2c.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,6 +42,7 @@
 #define DISARMED 0x01
 #define OLD_PASSWORD 0x10
 #define NEW_PASSWORD 0x11
+#define ENTER_KEY 0xFF
 
 #define MAX_PASSWORD_LENGTH 6
 #define MIN_PASSWORD_LENGTH 4
@@ -51,6 +53,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
+
+TIM_HandleTypeDef htim3;
 
 UART_HandleTypeDef huart2;
 
@@ -96,6 +100,13 @@ const osThreadAttr_t resetPwordTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for PIRsensorTask */
+osThreadId_t PIRsensorTaskHandle;
+const osThreadAttr_t PIRsensorTask_attributes = {
+  .name = "PIRsensorTask",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* Definitions for myQueue01 */
 osMessageQueueId_t myQueue01Handle;
 const osMessageQueueAttr_t myQueue01_attributes = {
@@ -106,6 +117,11 @@ osMutexId_t myMutexHandle;
 const osMutexAttr_t myMutex_attributes = {
   .name = "myMutex"
 };
+/* Definitions for isArmedMutex */
+osMutexId_t isArmedMutexHandle;
+const osMutexAttr_t isArmedMutex_attributes = {
+  .name = "isArmedMutex"
+};
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -115,12 +131,14 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_TIM3_Init(void);
 void StartKeyPadIptTask(void *argument);
 void StartLCDLine2Task(void *argument);
 void StartRED_LEDTask(void *argument);
 void StartGreen_LEDTask(void *argument);
 void StartLCDLine1Task(void *argument);
 void StartResetPwordTask(void *argument);
+void StartPIRsensorTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -237,8 +255,10 @@ int main(void)
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_I2C1_Init();
-  /* USER CODE BEGIN 2 */
+  MX_TIM3_Init();
 
+  /* USER CODE BEGIN 2 */
+  HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -246,6 +266,9 @@ int main(void)
   /* Create the mutex(es) */
   /* creation of myMutex */
   myMutexHandle = osMutexNew(&myMutex_attributes);
+
+  /* creation of isArmedMutex */
+  isArmedMutexHandle = osMutexNew(&isArmedMutex_attributes);
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
@@ -285,6 +308,9 @@ int main(void)
 
   /* creation of resetPwordTask */
   resetPwordTaskHandle = osThreadNew(StartResetPwordTask, NULL, &resetPwordTask_attributes);
+
+  /* creation of PIRsensorTask */
+  PIRsensorTaskHandle = osThreadNew(StartPIRsensorTask, NULL, &PIRsensorTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -392,6 +418,65 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 84-1;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000-1;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
+
+}
+
+/**
   * @brief USART2 Initialization Function
   * @param None
   * @retval None
@@ -480,6 +565,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : PIR_Sensor_Pin */
+  GPIO_InitStruct.Pin = PIR_Sensor_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(PIR_Sensor_GPIO_Port, &GPIO_InitStruct);
+
   /*Configure GPIO pin : R1_IPT_Pin */
   GPIO_InitStruct.Pin = R1_IPT_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
@@ -497,53 +588,70 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 uint8_t pword[6];
-
+uint8_t is_armed=0;
 // Function that handles keypad presses
 // Returns array of keys pressed forming password
 char* keyPressHandler(uint32_t ulNotificationValue,int cnt){
 	//static to preserve  password state across function calls
 	static char pword[6];
 
-	if(ulNotificationValue==0xFF || ulNotificationValue==0xFE || ulNotificationValue==0x11){
+	char temp[5];
+//	sprintf(temp,"%d\r\n",cnt);
+//	HAL_UART_Transmit(&huart2, temp, strlen(temp), osWaitForever);
+
+	if(ulNotificationValue==ENTER_KEY || ulNotificationValue==0xFE || ulNotificationValue==0x11){
+
 		pword[cnt]='\0';
 		return pword;
 	}
 	else{
 		if(ulNotificationValue==0x00){
+//			HAL_UART_Transmit(&huart2, "0\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='0';
 		}
 		else if(ulNotificationValue==0x01){
+//			HAL_UART_Transmit(&huart2, "1\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='1';
 		}
 		else if(ulNotificationValue==0x02){
+//			HAL_UART_Transmit(&huart2, "2\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='2';
 		}
 		else if(ulNotificationValue==0x03){
+//			HAL_UART_Transmit(&huart2, "3\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='3';
 		}
 		else if(ulNotificationValue==0x04){
+//			HAL_UART_Transmit(&huart2, "4\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='4';
 		}
 		else if(ulNotificationValue==0x05){
+//			HAL_UART_Transmit(&huart2, "5\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='5';
 		}
 		else if(ulNotificationValue==0x06){
+//			HAL_UART_Transmit(&huart2, "6\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='6';
 		}
 		else if(ulNotificationValue==0x07){
+//			HAL_UART_Transmit(&huart2, "7\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='7';
 		}
 		else if(ulNotificationValue==0x08){
+//			HAL_UART_Transmit(&huart2, "8\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='8';
 		}
 		else if(ulNotificationValue==0x09){
+//			HAL_UART_Transmit(&huart2, "9\r\n", strlen("0\r\n"), osWaitForever);
 			pword[cnt]='9';
 		}
+
+
 		return pword;
 	}
 }
 
-// read keypad (EXPLAIN WHY THE WHILE LOOP)@!!!!!!!!!!!!!!!!!!
+// read keypad function that returns pressed key value (in hex)
 uint8_t readKeypadChar(){
 	uint8_t val;
 
@@ -571,7 +679,7 @@ uint8_t readKeypadChar(){
 		}
 		else if(!HAL_GPIO_ReadPin(R4_IPT_GPIO_Port, R4_IPT_Pin)){
 			while(!HAL_GPIO_ReadPin(R4_IPT_GPIO_Port, R4_IPT_Pin));
-			val=0xFF;
+			val=ENTER_KEY;
 			break;
 		}
 
@@ -643,21 +751,21 @@ void StartKeyPadIptTask(void *argument)
 	HD44780_Clear();
 	HD44780_Backlight();
 
-//	uint32_t ulNotificationValue;
-//	int cnt=1;
-
-
 	//System starts in DISARMED mode
 	uint8_t val;
-	int sendflag=1;
+//	int sendflag=1;
 	xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
 /* Infinite loop */
-  for(;;)
-  {
+	for(;;)
+	{
 	  //blocking function until keypad press
 	  val=readKeypadChar();
+
+	  uint8_t arr[10];
+	  sprintf(arr,"%d\r\n",val);
+	  HAL_UART_Transmit(&huart2, arr, strlen(arr), osWaitForever);
 	  xTaskNotify(LCDLine2TaskHandle,val,eSetValueWithOverwrite);
-  }
+	}
   /* USER CODE END 5 */
 }
 
@@ -701,78 +809,115 @@ void StartLCDLine2Task(void *argument)
   /* USER CODE BEGIN StartLCDLine2Task */
 	uint32_t ulNotificationValue;
 	int cnt=0;
-	int resetPasswordFlag=1,newPasswordFlag=0;
+	int resetPasswordReadyFlag=1,newPasswordFlag=0;
 	char pword[MAX_PASSWORD_LENGTH];
 
+	uint8_t temp_is_armed;
+	HAL_UART_Transmit(&huart2, "\r\n", 2, osWaitForever);
+	HAL_UART_Transmit(&huart2, Read_from_Flash(START_ADDRESS), strlen(Read_from_Flash(START_ADDRESS)), osWaitForever);
   /* Infinite loop */
   for(;;)
   {
 	/* Infinite loop */
+//	 if(is_armed){
+//		 xTaskNotify(PIRsensorTaskHandle,ARMED,eSetValueWithOverwrite);
+//	 }
 
 	if(xTaskNotifyWait(0, 0xffffffff, &ulNotificationValue, portMAX_DELAY)){
 
 		//Copy value of keyPressHandler into pword array
 		strcpy(pword,keyPressHandler(ulNotificationValue,cnt));
 
-		if(ulNotificationValue==NEW_PASSWORD){
+		osMutexAcquire(isArmedMutexHandle, osWaitForever);
+		temp_is_armed=is_armed;
+		osMutexRelease(isArmedMutexHandle);
+		// User presses # key in the DISARMED state.
+		// Alternates between OLD_PASSWORD and DISARMED states.
+		if(ulNotificationValue==NEW_PASSWORD && !temp_is_armed){
 			cnt=0;
 			Clear_LCD_Line2Screen();
-			if(resetPasswordFlag){
-				resetPasswordFlag=0;
+			if(resetPasswordReadyFlag){
+				HAL_UART_Transmit(&huart2, "NEWPASSWORD!!!!\r\n", strlen("NEWPASSWORD!!!!\r\n"), osWaitForever);
+				resetPasswordReadyFlag=0;
 				xTaskNotify(resetPwordTaskHandle,OLD_PASSWORD,eSetValueWithOverwrite);
 			}
 			else{
+				HAL_UART_Transmit(&huart2, "SECOND ELSE \r\n", strlen("SECOND ELSE \r\n"), osWaitForever);
 				newPasswordFlag=0;
-				resetPasswordFlag=1;
+				resetPasswordReadyFlag=1;
 				xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
 			}
 		}
 
-		// If exceeded MAX_PASSWORD_LENGTH (6) or user presses enter or EXTI signaling reset
-		else if(cnt==(MAX_PASSWORD_LENGTH-1) || ulNotificationValue==0xFF || ulNotificationValue==0xFE){
+		// If exceeded MAX_PASSWORD_LENGTH (6) or user presses enter key.
+		else if(cnt==(MAX_PASSWORD_LENGTH-1) || ulNotificationValue==ENTER_KEY){
 				// User presses enter and/or password length is between 4 and 6
-				if((ulNotificationValue==0xFF && cnt>=MIN_PASSWORD_LENGTH) || cnt==(MAX_PASSWORD_LENGTH-1)){
+				if((ulNotificationValue==ENTER_KEY && cnt>=MIN_PASSWORD_LENGTH) || cnt==(MAX_PASSWORD_LENGTH-1)){
 					cnt=0;
 					Clear_LCD_Line2Screen();
 
 					// After user sets new password, we go back to DISARMED state
 					if(newPasswordFlag){
+						HAL_UART_Transmit(&huart2, "idk this is newpasswordflag\n\r", strlen("idk this is newpasswordflag\n\r"), osWaitForever);
+
 						Write_to_Flash(START_ADDRESS, pword);
 						xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
 						newPasswordFlag=0;
-						resetPasswordFlag=1;
+						resetPasswordReadyFlag=1;
 					}
 					// If user is setting alarm
 					else{
 						// If user arms the alarm with the correct password (strcmp verifies correctness)
-						if(resetPasswordFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
-							xTaskNotify(Red_LEDTaskHandle,ARMED,eNoAction);
+						if(!temp_is_armed && resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
+							uint8_t temp[100];
+							sprintf(temp,"resetPasswordFlag = %d 1st if\n\r",resetPasswordReadyFlag);
+							HAL_UART_Transmit(&huart2, temp, strlen(temp), osWaitForever);
+
+							osMutexAcquire(isArmedMutexHandle, osWaitForever);
+							is_armed=1;
+							osMutexRelease(isArmedMutexHandle);
+							xTaskNotify(Red_LEDTaskHandle,ARMED,eSetValueWithOverwrite);
+
+						}
+						else if(temp_is_armed && resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
+							HAL_UART_Transmit(&huart2, "NOWAYBRUGHHH\n\r", strlen("NOWAYBRUGHHH\n\r"), osWaitForever);
+
+							osMutexAcquire(isArmedMutexHandle, osWaitForever);
+							is_armed=0;
+							osMutexRelease(isArmedMutexHandle);
+							xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
 						}
 						// If user wants to change password.
 						// Correct system password must be entered (strcmp verifies correctness)
-						else if(!resetPasswordFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
+						else if(!resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
+							uint8_t temp[100];
+							sprintf(temp,"resetPasswordFlag = %d 3rd elseif\n\r",resetPasswordReadyFlag);
+
 							xTaskNotify(resetPwordTaskHandle,NEW_PASSWORD,eSetValueWithOverwrite);
 							newPasswordFlag=1;
 						}
 					}
 				}
-				// User presses reset. Notified via EXTI:
-				else if(ulNotificationValue==0xFE){
-					cnt=0;
-					resetPasswordFlag=1;
-					Clear_LCD_Line2Screen();
-					xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
-				}
 			}
 			// Generic user input
-			else{
-				if(resetPasswordFlag){
-					xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
-				}
+			else if(!(temp_is_armed && ulNotificationValue==NEW_PASSWORD)){
+//				if(resetPasswordFlag && !is_armed){
+//
+//
+//					xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
+////					is_armed=0;
+////					osMutexAcquire(isArmedMutexHandle, osWaitForever);
+////					is_armed=0;
+////					osMutexRelease(isArmedMutexHandle);
+//
+//					HAL_UART_Transmit(&huart2, "WE will be disarming dawg!\n\r", strlen("WE will be disarming dawg!\n\r"), osWaitForever);
+//				}
 				Write_To_LCD(cnt+1);
 				cnt++;
 			}
 		}
+
+
   }
   /* USER CODE END StartLCDLine2Task */
 }
@@ -912,6 +1057,65 @@ void StartResetPwordTask(void *argument)
 	  }
   }
   /* USER CODE END StartResetPwordTask */
+}
+
+/* USER CODE BEGIN Header_StartPIRsensorTask */
+/**
+* @brief Function implementing the PIRsensorTask thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartPIRsensorTask */
+void StartPIRsensorTask(void *argument)
+{
+  /* USER CODE BEGIN StartPIRsensorTask */
+  /* Infinite loop */
+	uint32_t pulNotificationValue;
+	uint8_t*temp_is_armed;
+	uint8_t seconds_cnt=0;
+
+  for(;;)
+  {
+
+		osMutexAcquire(isArmedMutexHandle, osWaitForever);
+		temp_is_armed=is_armed;
+		osMutexRelease(isArmedMutexHandle);
+
+//	  if(xTaskNotifyWait(0, 0, &pulNotificationValue, osWaitForever)){
+//		if(pulNotificationValue==ARMED){
+//			HAL_UART_Transmit(&huart2, "we can do pir!!!!!\r\n", strlen("we can do pir!!!!!\r\n"), osWaitForever);
+//
+//		//semaphore with while loop while(is_armed)
+//
+//		}
+//	  }
+		if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
+			seconds_cnt=0;
+	//			if(HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
+			while(seconds_cnt<10){
+				osDelay(1000);
+				seconds_cnt++;
+				uint8_t lol[100];
+				sprintf(lol,"This many seconds: %d\r\n",seconds_cnt);
+				HAL_UART_Transmit(&huart2, lol, strlen(lol), osWaitForever);
+			}
+			HAL_UART_Transmit(&huart2, "we can do pir!!!!!\r\n", strlen("we can do pir!!!!!\r\n"), osWaitForever);
+			if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
+				HAL_UART_Transmit(&huart2, "ABOUT TO START THE BUZZER\r\n", strlen("ABOUT TO START THE BUZZER\r\n"), osWaitForever);
+
+				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,500);
+				osDelay(2000);
+				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,0);
+			}
+		}
+//			else{
+//				osDelay(1);
+//			}
+//		}
+
+
+  }
+  /* USER CODE END StartPIRsensorTask */
 }
 
 /**
