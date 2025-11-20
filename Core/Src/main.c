@@ -1081,37 +1081,25 @@ void StartPIRsensorTask(void *argument)
 		temp_is_armed=is_armed;
 		osMutexRelease(isArmedMutexHandle);
 
-//	  if(xTaskNotifyWait(0, 0, &pulNotificationValue, osWaitForever)){
-//		if(pulNotificationValue==ARMED){
-//			HAL_UART_Transmit(&huart2, "we can do pir!!!!!\r\n", strlen("we can do pir!!!!!\r\n"), osWaitForever);
-//
-//		//semaphore with while loop while(is_armed)
-//
-//		}
-//	  }
+
 		if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
 			seconds_cnt=0;
-	//			if(HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
 			while(seconds_cnt<10){
 				osDelay(1000);
 				seconds_cnt++;
 				uint8_t lol[100];
-				sprintf(lol,"This many seconds: %d\r\n",seconds_cnt);
+				sprintf(lol,(uint8_t*)"This many seconds: %d\r\n",seconds_cnt);
 				HAL_UART_Transmit(&huart2, lol, strlen(lol), osWaitForever);
 			}
-			HAL_UART_Transmit(&huart2, "we can do pir!!!!!\r\n", strlen("we can do pir!!!!!\r\n"), osWaitForever);
+			HAL_UART_Transmit(&huart2, (uint8_t*)"we can do pir!!!!!\r\n", strlen("we can do pir!!!!!\r\n"), osWaitForever);
 			if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
-				HAL_UART_Transmit(&huart2, "ABOUT TO START THE BUZZER\r\n", strlen("ABOUT TO START THE BUZZER\r\n"), osWaitForever);
+				HAL_UART_Transmit(&huart2, (uint8_t*)"ABOUT TO START THE BUZZER\r\n", strlen("ABOUT TO START THE BUZZER\r\n"), osWaitForever);
 
 				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,500);
 				osDelay(2000);
 				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,0);
 			}
 		}
-//			else{
-//				osDelay(1);
-//			}
-//		}
 
 
   }

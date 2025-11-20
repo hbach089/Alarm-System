@@ -19,5 +19,5 @@
 ../Core/Src/main.c:984:6:StartLCDLine1Task	6
 ../Core/Src/main.c:1037:6:StartResetPwordTask	4
 ../Core/Src/main.c:1069:6:StartPIRsensorTask	6
-../Core/Src/main.c:1129:6:HAL_TIM_PeriodElapsedCallback	2
-../Core/Src/main.c:1147:6:Error_Handler	1
+../Core/Src/main.c:1117:6:HAL_TIM_PeriodElapsedCallback	2
+../Core/Src/main.c:1135:6:Error_Handler	1
