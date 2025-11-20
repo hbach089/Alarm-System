@@ -650,10 +650,7 @@ char* keyPressHandler(uint32_t ulNotificationValue,int cnt){
 		return pword;
 	}
 }
-<<<<<<< HEAD
 
-=======
->>>>>>> 31e7e8bf3498c1b7d7009692b9d245a50cd94831
 // read keypad function that returns pressed key value (in hex)
 uint8_t readKeypadChar(){
 	uint8_t val;
