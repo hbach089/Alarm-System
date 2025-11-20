@@ -847,7 +847,7 @@ void StartLCDLine2Task(void *argument)
 						newPasswordFlag=0;
 						resetPasswordReadyFlag=1;
 					}
-					// If user is setting alarm
+					// If user is entering old password (to arm, disarm or to change passwords).
 					else{
 						
 						// If user arms the alarm with the correct password (strcmp verifies correctness)
