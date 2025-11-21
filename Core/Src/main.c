@@ -803,6 +803,7 @@ void StartLCDLine2Task(void *argument)
   /* Infinite loop */
   for(;;)
   {
+
 	/* Infinite loop */
 	if(xTaskNotifyWait(0, 0xffffffff, &ulNotificationValue, portMAX_DELAY)){
 
@@ -856,6 +857,7 @@ void StartLCDLine2Task(void *argument)
 							sprintf(temp,"resetPasswordFlag = %d 1st if\n\r",resetPasswordReadyFlag);
 							HAL_UART_Transmit(&huart2, temp, strlen(temp), osWaitForever);
 
+							resetPasswordReadyFlag=0;
 							osMutexAcquire(isArmedMutexHandle, osWaitForever);
 							is_armed=1;
 							osMutexRelease(isArmedMutexHandle);
@@ -864,9 +866,10 @@ void StartLCDLine2Task(void *argument)
 						}
 							
 						// If user disarms the alarm with the correct password (strcmp verifies correctness)
-						else if(temp_is_armed && resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
+						else if(temp_is_armed && !resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
 							HAL_UART_Transmit(&huart2, "NOWAYBRUGHHH\n\r", strlen("NOWAYBRUGHHH\n\r"), osWaitForever);
 
+							resetPasswordReadyFlag=1;
 							osMutexAcquire(isArmedMutexHandle, osWaitForever);
 							is_armed=0;
 							osMutexRelease(isArmedMutexHandle);
@@ -937,6 +940,7 @@ void StartGreen_LEDTask(void *argument)
   {
 	  // Clear set bits on exit, and notifies the LCD to disarm the system
 	  if(xTaskNotifyWait(0, 0xffffffff, &ulNotificationValue, portMAX_DELAY)){
+		  HAL_UART_Transmit(&huart2, "WE Are in green\r\n", strlen("WE Are in green\r\n"), osWaitForever);
 		// If it is a simple disarm, notify the LCD with disarm message,
 		// Otherwise simply turn on Green LED
 		if(ulNotificationValue==DISARMED){
@@ -1056,10 +1060,7 @@ void StartPIRsensorTask(void *argument)
 		temp_is_armed=is_armed;
 		osMutexRelease(isArmedMutexHandle);
 
-<<<<<<< HEAD
 
-=======
->>>>>>> 5ca35f54417640d78976960d2eef37f787de28f0
 		if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
 			seconds_cnt=0;
 			while(seconds_cnt<10){
@@ -1077,12 +1078,13 @@ void StartPIRsensorTask(void *argument)
 				osDelay(2000);
 				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,0);
 			}
+//			else{
+//				osDelay(1);
+//			}
 		}
-<<<<<<< HEAD
-
-
-=======
->>>>>>> 5ca35f54417640d78976960d2eef37f787de28f0
+//		else{
+//			osDelay(1);
+//		}
   }
   /* USER CODE END StartPIRsensorTask */
 }
