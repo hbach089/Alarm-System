@@ -65,10 +65,10 @@ const osThreadAttr_t KeyPadIptTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for LCDLine2Task */
-osThreadId_t LCDLine2TaskHandle;
-const osThreadAttr_t LCDLine2Task_attributes = {
-  .name = "LCDLine2Task",
+/* Definitions for LCDLine2Pword */
+osThreadId_t LCDLine2PwordHandle;
+const osThreadAttr_t LCDLine2Pword_attributes = {
+  .name = "LCDLine2Pword",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
@@ -107,6 +107,13 @@ const osThreadAttr_t PIRsensorTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+/* Definitions for LCDLine2TIM */
+osThreadId_t LCDLine2TIMHandle;
+const osThreadAttr_t LCDLine2TIM_attributes = {
+  .name = "LCDLine2TIM",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* Definitions for myQueue01 */
 osMessageQueueId_t myQueue01Handle;
 const osMessageQueueAttr_t myQueue01_attributes = {
@@ -133,12 +140,13 @@ static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_TIM3_Init(void);
 void StartKeyPadIptTask(void *argument);
-void StartLCDLine2Task(void *argument);
+void StartLCDLine2PwordTask(void *argument);
 void StartRED_LEDTask(void *argument);
 void StartGreen_LEDTask(void *argument);
 void StartLCDLine1Task(void *argument);
 void StartResetPwordTask(void *argument);
 void StartPIRsensorTask(void *argument);
+void StartLCDLine2TIMTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -147,13 +155,13 @@ void StartPIRsensorTask(void *argument);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
-	if(GPIO_Pin==BLUE_PUSH_BTN_Pin){
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-		xTaskNotifyFromISR(LCDLine2TaskHandle,0xFE,eSetValueWithOverwrite,&xHigherPriorityTaskWoken);
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-}
+//void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin){
+//	if(GPIO_Pin==BLUE_PUSH_BTN_Pin){
+//		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+//		xTaskNotifyFromISR(LCDLine2TaskHandle,0xFE,eSetValueWithOverwrite,&xHigherPriorityTaskWoken);
+//		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+//	}
+//}
 
 // Function to convert ASCII value to char (integer from 0-9 inclusive)
 char ASCIItoChar(uint8_t asciiVal){
@@ -222,6 +230,34 @@ char* Read_from_Flash(uint32_t startMemAddress){
 	return pwordInFlash;
 }
 
+
+// Function writes * symbols on screen every keypad press
+void Write_To_LCD(int cnt){
+	//Write respective amount of * characters on screen
+	char screenContent[cnt];
+	memset(screenContent,'*',cnt);
+	screenContent[cnt]='\0';
+
+	// use mutex to synchronize use of shared ressource (LCD screen)
+	osMutexAcquire(myMutexHandle, osWaitForever);
+	HD44780_SetCursor(0,1);
+	HD44780_PrintStr(screenContent);
+	osMutexRelease(myMutexHandle);
+}
+
+// Clear Line 2 of LCD Screen
+void Clear_LCD_Line2Screen(){
+
+	// use mutex to synchronize use of shared ressource (LCD screen)
+	osMutexAcquire(myMutexHandle, osWaitForever);
+	//Erase line 2 of LCD Screen with spaces.
+	HD44780_SetCursor(0,1);
+	for(int i=0;i<16;i++){
+		HD44780_PrintStr(" ");
+	}
+	osMutexRelease(myMutexHandle);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -256,7 +292,6 @@ int main(void)
   MX_USART2_UART_Init();
   MX_I2C1_Init();
   MX_TIM3_Init();
-
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_3);
   /* USER CODE END 2 */
@@ -294,8 +329,8 @@ int main(void)
   /* creation of KeyPadIptTask */
   KeyPadIptTaskHandle = osThreadNew(StartKeyPadIptTask, NULL, &KeyPadIptTask_attributes);
 
-  /* creation of LCDLine2Task */
-  LCDLine2TaskHandle = osThreadNew(StartLCDLine2Task, NULL, &LCDLine2Task_attributes);
+  /* creation of LCDLine2Pword */
+  LCDLine2PwordHandle = osThreadNew(StartLCDLine2PwordTask, NULL, &LCDLine2Pword_attributes);
 
   /* creation of Red_LEDTask */
   Red_LEDTaskHandle = osThreadNew(StartRED_LEDTask, NULL, &Red_LEDTask_attributes);
@@ -311,6 +346,9 @@ int main(void)
 
   /* creation of PIRsensorTask */
   PIRsensorTaskHandle = osThreadNew(StartPIRsensorTask, NULL, &PIRsensorTask_attributes);
+
+  /* creation of LCDLine2TIM */
+  LCDLine2TIMHandle = osThreadNew(StartLCDLine2TIMTask, NULL, &LCDLine2TIM_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -749,49 +787,21 @@ void StartKeyPadIptTask(void *argument)
 	  uint8_t arr[10];
 	  sprintf(arr,"%d\r\n",val);
 	  HAL_UART_Transmit(&huart2, arr, strlen(arr), osWaitForever);
-	  xTaskNotify(LCDLine2TaskHandle,val,eSetValueWithOverwrite);
+	  xTaskNotify(LCDLine2PwordHandle,val,eSetValueWithOverwrite);
 	}
   /* USER CODE END 5 */
 }
 
-/* USER CODE BEGIN Header_StartLCDLine2Task */
-
-// Function writes * symbols on screen every keypad press
-void Write_To_LCD(int cnt){
-	//Write respective amount of * characters on screen
-	char screenContent[cnt];
-	memset(screenContent,'*',cnt);
-	screenContent[cnt]='\0';
-
-	// use mutex to synchronize use of shared ressource (LCD screen)
-	osMutexAcquire(myMutexHandle, osWaitForever);
-	HD44780_SetCursor(0,1);
-	HD44780_PrintStr(screenContent);
-	osMutexRelease(myMutexHandle);
-}
-
-// Clear Line 2 of LCD Screen
-void Clear_LCD_Line2Screen(){
-
-	// use mutex to synchronize use of shared ressource (LCD screen)
-	osMutexAcquire(myMutexHandle, osWaitForever);
-	//Erase line 2 of LCD Screen with spaces.
-	HD44780_SetCursor(0,1);
-	for(int i=0;i<16;i++){
-		HD44780_PrintStr(" ");
-	}
-	osMutexRelease(myMutexHandle);
-}
-
+/* USER CODE BEGIN Header_StartLCDLine2PwordTask */
 /**
-* @brief Function implementing the LCDLine2Task thread.
+* @brief Function implementing the LCDLine2Pword thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartLCDLine2Task */
-void StartLCDLine2Task(void *argument)
+/* USER CODE END Header_StartLCDLine2PwordTask */
+void StartLCDLine2PwordTask(void *argument)
 {
-  /* USER CODE BEGIN StartLCDLine2Task */
+  /* USER CODE BEGIN StartLCDLine2PwordTask */
 	uint32_t ulNotificationValue;
 	int cnt=0;
 	int resetPasswordReadyFlag=1,newPasswordFlag=0;
@@ -813,7 +823,7 @@ void StartLCDLine2Task(void *argument)
 		osMutexAcquire(isArmedMutexHandle, osWaitForever);
 		temp_is_armed=is_armed;
 		osMutexRelease(isArmedMutexHandle);
-		
+
 		// User presses # key in the DISARMED state.
 		// Alternates between OLD_PASSWORD and DISARMED states.
 		if(ulNotificationValue==NEW_PASSWORD && !temp_is_armed){
@@ -850,7 +860,7 @@ void StartLCDLine2Task(void *argument)
 					}
 					// If user is entering old password (to arm, disarm or to change passwords).
 					else{
-						
+
 						// If user arms the alarm with the correct password (strcmp verifies correctness)
 						if(!temp_is_armed && resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
 							uint8_t temp[100];
@@ -864,7 +874,7 @@ void StartLCDLine2Task(void *argument)
 							xTaskNotify(Red_LEDTaskHandle,ARMED,eSetValueWithOverwrite);
 
 						}
-							
+
 						// If user disarms the alarm with the correct password (strcmp verifies correctness)
 						else if(temp_is_armed && !resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
 							HAL_UART_Transmit(&huart2, "NOWAYBRUGHHH\n\r", strlen("NOWAYBRUGHHH\n\r"), osWaitForever);
@@ -875,7 +885,7 @@ void StartLCDLine2Task(void *argument)
 							osMutexRelease(isArmedMutexHandle);
 							xTaskNotify(Green_LEDTaskHandle,DISARMED,eSetValueWithOverwrite);
 						}
-							
+
 						// If user wants to change password.
 						// Correct system password must be entered (strcmp verifies correctness)
 						else if(!resetPasswordReadyFlag && !strcmp(pword,Read_from_Flash(START_ADDRESS))){
@@ -895,9 +905,8 @@ void StartLCDLine2Task(void *argument)
 			}
 		}
 
-
   }
-  /* USER CODE END StartLCDLine2Task */
+   /* USER CODE END StartLCDLine2PwordTask */
 }
 
 /* USER CODE BEGIN Header_StartRED_LEDTask */
@@ -1049,8 +1058,7 @@ void StartPIRsensorTask(void *argument)
 {
   /* USER CODE BEGIN StartPIRsensorTask */
   /* Infinite loop */
-	uint32_t pulNotificationValue;
-	uint8_t*temp_is_armed;
+	uint8_t temp_is_armed;
 	uint8_t seconds_cnt=0;
 
   for(;;)
@@ -1062,31 +1070,97 @@ void StartPIRsensorTask(void *argument)
 
 
 		if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
-			seconds_cnt=0;
-			while(seconds_cnt<10){
+
+			// Loop for 60 seconds
+			seconds_cnt=60;
+			while(seconds_cnt>=1){
+
+				// Every second, get the state of the system.
+				osMutexAcquire(isArmedMutexHandle, osWaitForever);
+				temp_is_armed=is_armed;
+				osMutexRelease(isArmedMutexHandle);
+
 				osDelay(1000);
-				seconds_cnt++;
-				uint8_t lol[100];
-				sprintf(lol,(uint8_t*)"This many seconds: %d\r\n",seconds_cnt);
-				HAL_UART_Transmit(&huart2, lol, strlen(lol), osWaitForever);
+
+				// If the system is armed, notify LCDLine2TIM task with time count value and decrement the seconds count.
+				// Otherwise notify that LCDLine2TIM task that the system is now in DISARMED state.
+				if(temp_is_armed){
+					xTaskNotify(LCDLine2TIMHandle,seconds_cnt,eSetValueWithOverwrite);
+					seconds_cnt--;
+				}
+				else{
+					break;
+				}
+
 			}
-			HAL_UART_Transmit(&huart2, (uint8_t*)"we can do pir!!!!!\r\n", strlen("we can do pir!!!!!\r\n"), osWaitForever);
+			// After 60 seconds are done and system is still in ARMED state,
+			// sound the alarm if PIR detects movement
+			__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,0);
+
 			if(temp_is_armed && HAL_GPIO_ReadPin(PIR_Sensor_GPIO_Port, PIR_Sensor_Pin)==GPIO_PIN_SET){
 				HAL_UART_Transmit(&huart2, (uint8_t*)"ABOUT TO START THE BUZZER\r\n", strlen("ABOUT TO START THE BUZZER\r\n"), osWaitForever);
-
 				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,500);
 				osDelay(2000);
 				__HAL_TIM_SET_COMPARE(&htim3,TIM_CHANNEL_3,0);
 			}
-//			else{
-//				osDelay(1);
-//			}
+			else{
+				osDelay(1);
+			}
 		}
-//		else{
-//			osDelay(1);
-//		}
+		else{
+			osDelay(1);
+		}
   }
   /* USER CODE END StartPIRsensorTask */
+}
+
+/* USER CODE BEGIN Header_StartLCDLine2TIMTask */
+/**
+* @brief Function implementing the LCDLine2TIM thread.
+* @param argument: Not used
+* @retval None
+*/
+
+// Task that displays the 60 second timer count once PIR detects movement.
+
+/* USER CODE END Header_StartLCDLine2TIMTask */
+void StartLCDLine2TIMTask(void *argument)
+{
+  /* USER CODE BEGIN StartLCDLine2TIMTask */
+	uint32_t pulNotificationValue;
+	char cnt[5];
+	uint8_t temp_is_armed;
+  /* Infinite loop */
+  for(;;)
+  {
+	  if(xTaskNotifyWait(0, 0xffffffff, &pulNotificationValue, osWaitForever)){
+
+		osMutexAcquire(isArmedMutexHandle, osWaitForever);
+		temp_is_armed=is_armed;
+		osMutexRelease(isArmedMutexHandle);
+
+
+		osMutexAcquire(myMutexHandle, osWaitForever);
+
+		// Clear the count value on screen
+		HD44780_SetCursor(6,1);
+		for(int i=0;i<7;i++){
+			HD44780_PrintStr(" ");
+		}
+
+		// If the system is in DISARMED state, stop displaying the count. (In this case we would only have cleared)
+		// Otherwise display the count value
+		if(temp_is_armed){
+			HAL_UART_Transmit(&huart2, "why are we here>>>???\r\n", strlen("why are we here>>>???\r\n"), osWaitForever);
+			HD44780_SetCursor(10, 1);
+			sprintf(cnt,"%d",(int)pulNotificationValue);
+			HD44780_PrintStr(cnt);
+		}
+
+		osMutexRelease(myMutexHandle);
+	  }
+  }
+  /* USER CODE END StartLCDLine2TIMTask */
 }
 
 /**
