@@ -5,10 +5,10 @@ A FreeRTOS-based Alarm System created with STM32 Nucleo board using the F446RE A
 </p>
 
 ## Table of Contents
-- [Hardware Setup](https://github.com/hbach089/Alarm-System/README.md#hardware-setup)
-- [RTOS tasks](https://github.com/hbach089/Alarm-System/README.md#rtos-tasks)
-- [How to run](https://github.com/hbach089/Alarm-System/README.md#how-to-run)
-- [Live Demo](https://github.com/hbach089/Alarm-System/README.md#live-demo)
+- [Hardware Setup](https://github.com/hbach089/Alarm-System?tab=readme-ov-file#hardware-setup)
+- [RTOS tasks](https://github.com/hbach089/Alarm-System?tab=readme-ov-file#rtos-tasks)
+- [How to run](https://github.com/hbach089/Alarm-System?tab=readme-ov-file#how-to-run)
+- [Live Demo](https://github.com/hbach089/Alarm-System?tab=readme-ov-file#live-demo)
 
 ## Hardware Setup
 
